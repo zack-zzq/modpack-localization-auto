@@ -31,6 +31,8 @@ class AppConfig:
     pack_format: int = 34
     llm_batch_size: int = 50
     llm_temperature: float = 0.3
+    llm_timeout: float = 120.0
+    llm_max_retries: int = 3
 
     # OpenAI-compatible LLM (from .env)
     openai_base_url: str = ""
@@ -76,6 +78,8 @@ def load_config(config_path: Path | None = None) -> AppConfig:
         pack_format=translation.get("pack_format", 34),
         llm_batch_size=translation.get("llm_batch_size", 50),
         llm_temperature=translation.get("llm_temperature", 0.3),
+        llm_timeout=float(translation.get("llm_timeout", 120.0)),
+        llm_max_retries=translation.get("llm_max_retries", 3),
         openai_base_url=os.environ.get("OPENAI_BASE_URL", ""),
         openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
         openai_model_id=os.environ.get("OPENAI_MODEL_ID", ""),

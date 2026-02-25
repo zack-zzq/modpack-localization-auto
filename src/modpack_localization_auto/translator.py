@@ -184,15 +184,20 @@ def translate_with_llm(
         logger.warning("No OpenAI API key configured, skipping LLM translation")
         return {}
 
+    from openai import APITimeoutError, APIConnectionError
+
     client = OpenAI(
         base_url=config.openai_base_url or None,
         api_key=config.openai_api_key,
+        timeout=config.llm_timeout,
+        max_retries=0,  # We handle retries ourselves
     )
 
     translated: dict[str, str] = {}
     batch_size = config.llm_batch_size
     items = list(entries.items())
     total_batches = (len(items) + batch_size - 1) // batch_size
+    max_retries = config.llm_max_retries
 
     for batch_idx in range(total_batches):
         start = batch_idx * batch_size
@@ -215,8 +220,8 @@ def translate_with_llm(
 
         user_content = json.dumps(batch, indent=2, ensure_ascii=False)
 
-        # Retry logic
-        for attempt in range(3):
+        # Retry logic with exponential backoff
+        for attempt in range(max_retries):
             try:
                 response = client.chat.completions.create(
                     model=config.openai_model_id,
@@ -250,24 +255,48 @@ def translate_with_llm(
                 else:
                     logger.warning("  Batch %d: unexpected response type", batch_idx + 1)
 
+            except (APITimeoutError, APIConnectionError) as e:
+                backoff = min(2 ** (attempt + 1), 30)
+                logger.warning(
+                    "  Batch %d attempt %d/%d: timeout/connection error, "
+                    "retrying in %ds: %s",
+                    batch_idx + 1,
+                    attempt + 1,
+                    max_retries,
+                    backoff,
+                    e,
+                )
+                if attempt < max_retries - 1:
+                    time.sleep(backoff)
             except json.JSONDecodeError as e:
+                backoff = min(2 ** attempt, 10)
                 logger.warning(
-                    "  Batch %d attempt %d: JSON parse error: %s",
+                    "  Batch %d attempt %d/%d: JSON parse error: %s",
                     batch_idx + 1,
                     attempt + 1,
+                    max_retries,
                     e,
                 )
-                if attempt < 2:
-                    time.sleep(2 ** attempt)
+                if attempt < max_retries - 1:
+                    time.sleep(backoff)
             except Exception as e:
+                backoff = min(2 ** (attempt + 1), 30)
                 logger.warning(
-                    "  Batch %d attempt %d: API error: %s",
+                    "  Batch %d attempt %d/%d: API error: %s",
                     batch_idx + 1,
                     attempt + 1,
+                    max_retries,
+                    backoff,
                     e,
                 )
-                if attempt < 2:
-                    time.sleep(2 ** attempt)
+                if attempt < max_retries - 1:
+                    time.sleep(backoff)
+        else:
+            logger.error(
+                "  Batch %d: all %d retries exhausted, skipping",
+                batch_idx + 1,
+                max_retries,
+            )
 
         # Rate limiting: small delay between batches
         if batch_idx < total_batches - 1:
