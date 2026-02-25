@@ -1,0 +1,155 @@
+"""Extract translatable strings from an installed modpack."""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ExtractionResults:
+    """Summary of what was extracted."""
+
+    mods_keys: int = 0
+    kubejs_keys: int = 0
+    ftbquests_keys: int = 0
+    has_kubejs: bool = False
+    has_ftbquests: bool = False
+
+
+def extract_mods(install_dir: Path, output_dir: Path) -> int:
+    """Extract translatable strings from mod jars."""
+    from mods_string_extractor.extractor import extract_mods as _extract_mods
+
+    mods_dir = install_dir / "mods"
+    if not mods_dir.is_dir():
+        logger.warning("No mods/ directory found at %s", mods_dir)
+        return 0
+
+    mods_output = output_dir / "mods"
+    mods_output.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Extracting strings from mods in: %s", mods_dir)
+    results = _extract_mods(mods_dir, mods_output)
+
+    total = sum(r.total_keys for r in results)
+    logger.info(
+        "Mods extraction complete: %d mods, %d keys",
+        len(results),
+        total,
+    )
+    return total
+
+
+def extract_kubejs(install_dir: Path, output_dir: Path) -> int:
+    """Extract translatable strings from KubeJS scripts."""
+    from kubejs_string_extractor.extractor import extract_from_directory
+    from kubejs_string_extractor.keygen import generate_keys
+    from kubejs_string_extractor.writer import write_lang_json
+
+    kubejs_dir = install_dir / "kubejs"
+    if not kubejs_dir.is_dir():
+        logger.info("No kubejs/ directory found, skipping KubeJS extraction")
+        return 0
+
+    # Check if any script directories exist
+    has_scripts = any(
+        (kubejs_dir / d).is_dir()
+        for d in ("client_scripts", "server_scripts", "startup_scripts")
+    )
+    if not has_scripts:
+        logger.info("No KubeJS script directories found, skipping")
+        return 0
+
+    logger.info("Extracting strings from KubeJS scripts in: %s", kubejs_dir)
+    result = extract_from_directory(kubejs_dir)
+
+    if not result.strings:
+        logger.info("No translatable KubeJS strings found")
+        return 0
+
+    # Generate translation keys
+    translations = generate_keys(result.strings, namespace="kubejs")
+    logger.info("Generated %d unique KubeJS translation keys", len(translations))
+
+    # Write en_us.json for the extracted strings
+    kubejs_output = output_dir / "kubejs"
+    kubejs_output.mkdir(parents=True, exist_ok=True)
+    write_lang_json(translations, kubejs_output, namespace="kubejs_string_extractor")
+
+    return len(translations)
+
+
+def extract_ftbquests(install_dir: Path, output_dir: Path, modpack_name: str) -> int:
+    """Extract translatable strings from FTB Quests."""
+    # FTB Quests can be in several locations
+    quest_paths = [
+        install_dir / "config" / "ftbquests" / "quests",
+        install_dir / "ftbquests" / "quests",
+        install_dir / "config" / "ftbquests",
+    ]
+
+    quests_dir = None
+    for p in quest_paths:
+        if p.is_dir():
+            quests_dir = p
+            break
+
+    if quests_dir is None:
+        logger.info("No FTB Quests directory found, skipping")
+        return 0
+
+    ftbq_output = output_dir / "ftbquests"
+    ftbq_output.mkdir(parents=True, exist_ok=True)
+
+    # Check format: new (1.20+) has lang/ subdirectory
+    lang_dir = quests_dir / "lang"
+    if lang_dir.is_dir():
+        # New format: split SNBT lang files into JSON
+        from ftb_quest_localizer.splitter import split_lang_files
+
+        logger.info("Detected new-format FTB Quests (1.20+) with lang/ directory")
+        results = split_lang_files(quests_dir, ftbq_output)
+        total = sum(results.values()) if results else 0
+        logger.info("FTB Quests extraction (new format): %d entries", total)
+        return total
+    else:
+        # Old format: extract inline strings from chapter files
+        from ftb_quest_localizer.extractor import extract_quest_strings
+
+        logger.info("Detected old-format FTB Quests (pre-1.20)")
+        results = extract_quest_strings(quests_dir, ftbq_output, modpack_name)
+        total = sum(results.values()) if results else 0
+        logger.info("FTB Quests extraction (old format): %d entries", total)
+        return total
+
+
+def extract_all(install_dir: Path, work_dir: Path, modpack_name: str) -> ExtractionResults:
+    """Run all extractors on an installed modpack."""
+    extracted_dir = work_dir / "extracted"
+    extracted_dir.mkdir(parents=True, exist_ok=True)
+
+    results = ExtractionResults()
+
+    # 1. Mods
+    results.mods_keys = extract_mods(install_dir, extracted_dir)
+
+    # 2. KubeJS
+    results.kubejs_keys = extract_kubejs(install_dir, extracted_dir)
+    results.has_kubejs = results.kubejs_keys > 0
+
+    # 3. FTB Quests
+    results.ftbquests_keys = extract_ftbquests(install_dir, extracted_dir, modpack_name)
+    results.has_ftbquests = results.ftbquests_keys > 0
+
+    logger.info(
+        "Extraction summary — Mods: %d keys, KubeJS: %d keys, FTB Quests: %d keys",
+        results.mods_keys,
+        results.kubejs_keys,
+        results.ftbquests_keys,
+    )
+
+    return results

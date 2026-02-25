@@ -1,0 +1,24 @@
+# Modpack Localization Auto — Configuration
+# =============================================
+
+[modpack]
+# CurseForge modpack slug (e.g. "all-the-mods-10")
+slug = "all-the-mods-10"
+
+[translation]
+# Target language code for Minecraft lang files
+target_lang = "zh_cn"
+# Minecraft resource pack format version (34 = 1.21.x)
+pack_format = 34
+# Batch size for LLM translation (number of entries per API call)
+llm_batch_size = 50
+# LLM temperature (lower = more deterministic)
+llm_temperature = 0.3
+
+# OpenAI-compatible LLM settings are read from .env:
+#   OPENAI_BASE_URL — API endpoint
+#   OPENAI_API_KEY  — API key
+#   OPENAI_MODEL_ID — Model identifier
+
+# CurseForge API key is read from .env:
+#   CURSEFORGE_API_KEY

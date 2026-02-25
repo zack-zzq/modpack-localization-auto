@@ -1,0 +1,113 @@
+name: Modpack Localization Auto
+
+on:
+  schedule:
+    # Run daily at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  localize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Check for modpack updates
+        id: check
+        env:
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+        run: |
+          # Quick check: compare stored version with latest CurseForge file_id
+          if [ -f "output/$(grep -oP 'slug\s*=\s*"\K[^"]+' config.toml)/version.json" ]; then
+            SLUG=$(grep -oP 'slug\s*=\s*"\K[^"]+' config.toml)
+            STORED_ID=$(python -c "import json; print(json.load(open('output/$SLUG/version.json'))['file_id'])" 2>/dev/null || echo "0")
+            echo "stored_id=$STORED_ID" >> $GITHUB_OUTPUT
+            echo "Stored file_id: $STORED_ID"
+          else
+            echo "stored_id=0" >> $GITHUB_OUTPUT
+            echo "No existing version found, will run pipeline"
+          fi
+          echo "should_run=true" >> $GITHUB_OUTPUT
+
+      - name: Run localization pipeline
+        if: steps.check.outputs.should_run == 'true'
+        env:
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL_ID: ${{ secrets.OPENAI_MODEL_ID }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+        run: uv run modpack-localize
+
+      - name: Commit and push results
+        if: steps.check.outputs.should_run == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add output/
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            SLUG=$(grep -oP 'slug\s*=\s*"\K[^"]+' config.toml)
+            VERSION=$(python -c "import json; print(json.load(open('output/$SLUG/version.json'))['version'])" 2>/dev/null || echo "unknown")
+            git commit -m "chore: update localization for $SLUG v$VERSION"
+            git push
+          fi
+
+      - name: Create Release
+        if: steps.check.outputs.should_run == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SLUG=$(grep -oP 'slug\s*=\s*"\K[^"]+' config.toml)
+          VERSION_FILE="output/$SLUG/version.json"
+          if [ ! -f "$VERSION_FILE" ]; then
+            echo "No version file found, skipping release"
+            exit 0
+          fi
+
+          VERSION=$(python -c "import json; print(json.load(open('$VERSION_FILE'))['version'])" 2>/dev/null || echo "unknown")
+          FILE_ID=$(python -c "import json; print(json.load(open('$VERSION_FILE'))['file_id'])" 2>/dev/null || echo "0")
+          TAG="v${VERSION}-${FILE_ID}"
+
+          # Check if release already exists
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release $TAG already exists, skipping"
+            exit 0
+          fi
+
+          # Collect release assets
+          ASSETS=""
+          for f in output/$SLUG/*.zip; do
+            if [ -f "$f" ]; then
+              ASSETS="$ASSETS $f"
+            fi
+          done
+
+          if [ -z "$ASSETS" ]; then
+            echo "No zip files found, skipping release"
+            exit 0
+          fi
+
+          gh release create "$TAG" \
+            --title "$SLUG Localization $VERSION" \
+            --notes "Automated localization for **$SLUG** version **$VERSION** (CurseForge file_id: $FILE_ID)" \
+            $ASSETS

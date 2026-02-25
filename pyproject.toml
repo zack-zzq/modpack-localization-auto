@@ -1,0 +1,41 @@
+[project]
+name = "modpack-localization-auto"
+version = "0.1.0"
+description = "Automated Minecraft modpack localization pipeline — download, extract, translate, and package."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [
+    { name = "zack-zzq" },
+]
+dependencies = [
+    "httpx>=0.27",
+    "openai>=1.0",
+    "python-dotenv>=1.0",
+    "tomli>=2.0;python_version<'3.11'",
+    "curseforge-dl",
+    "ftb-quest-localizer",
+    "kubejs-string-extractor",
+    "mods-string-extractor",
+]
+
+[project.scripts]
+modpack-localize = "modpack_localization_auto.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/modpack_localization_auto"]
+
+[tool.uv.sources]
+curseforge-dl = { path = "libs/curseforge-dl" }
+ftb-quest-localizer = { path = "libs/FTBQuestLocalizerPython" }
+kubejs-string-extractor = { path = "libs/kubejs-string-extractor" }
+mods-string-extractor = { path = "libs/mods-string-extractor" }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
