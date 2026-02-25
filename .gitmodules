@@ -1,0 +1,18 @@
+[submodule "libs/curseforge-dl"]
+	path = libs/curseforge-dl
+	url = https://github.com/zack-zzq/curseforge-dl.git
+[submodule "libs/kubejs-string-extractor"]
+	path = libs/kubejs-string-extractor
+	url = https://github.com/zack-zzq/kubejs-string-extractor.git
+[submodule "libs/FTBQuestLocalizerPython"]
+	path = libs/FTBQuestLocalizerPython
+	url = https://github.com/zack-zzq/FTBQuestLocalizerPython.git
+[submodule "libs/misc-localization-packs"]
+	path = libs/misc-localization-packs
+	url = https://github.com/zack-zzq/misc-localization-packs.git
+[submodule "libs/i18n-Dict-Extender"]
+	path = libs/i18n-Dict-Extender
+	url = https://github.com/VM-Chinese-translate-group/i18n-Dict-Extender.git
+[submodule "libs/mods-string-extractor"]
+	path = libs/mods-string-extractor
+	url = https://github.com/zack-zzq/mods-string-extractor.git
