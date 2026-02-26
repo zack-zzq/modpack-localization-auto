@@ -435,8 +435,11 @@ def translate_all(
             # ── Resume check: load partial translations ──
             existing_translations = _load_partial_translations(output_file)
 
-            # Phase 1: Dictionary matching
-            dict_translated, remaining = translate_with_dictionary(entries, dictionary)
+            # Phase 1: Dictionary matching (mods only — kubejs/ftbquests are custom content)
+            dict_translated: dict[str, str] = {}
+            remaining = entries
+            if subdir_name == "mods":
+                dict_translated, remaining = translate_with_dictionary(entries, dictionary)
 
             # Remove entries that were already translated in a previous run
             already_done: dict[str, str] = {}
