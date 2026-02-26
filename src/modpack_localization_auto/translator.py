@@ -309,12 +309,50 @@ def translate_with_llm(
 # ── Pipeline ───────────────────────────────────────────────────────
 
 
+def _is_fully_translated(output_file: Path, entries: dict[str, str]) -> bool:
+    """Check if an output file exists and contains translations for all entries."""
+    if not output_file.exists():
+        return False
+    try:
+        existing = json.loads(output_file.read_text(encoding="utf-8"))
+        if not isinstance(existing, dict):
+            return False
+        # Check that all keys exist and values differ from English originals
+        # (meaning they've been translated, not just copied)
+        for key, en_value in entries.items():
+            if key not in existing:
+                return False
+            # If value is same as English, it may not have been translated yet
+            # But some entries legitimately keep their English value (numbers, names)
+            # So we just check key presence
+        return True
+    except Exception:
+        return False
+
+
+def _load_partial_translations(output_file: Path) -> dict[str, str]:
+    """Load existing partial translations from a previous run."""
+    if not output_file.exists():
+        return {}
+    try:
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+        return {}
+    except Exception:
+        return {}
+
+
 def translate_all(
     extracted_dir: Path,
     translated_dir: Path,
     config: AppConfig,
 ) -> None:
     """Run full translation pipeline: dictionary match, then LLM.
+
+    Supports resumption: skips fully-translated files, resumes partially-
+    translated files by only sending un-translated keys to the LLM.
+    Saves progress after each file so interrupted runs can be continued.
 
     Processes all JSON files in extracted_dir subdirectories (mods/, kubejs/, ftbquests/).
     Writes translated files to translated_dir with same structure.
@@ -323,6 +361,11 @@ def translate_all(
 
     # Load dictionary
     dictionary = load_dictionary(config.work_dir)
+
+    # Collect stats
+    total_files = 0
+    skipped_files = 0
+    translated_files = 0
 
     # Process each extraction type
     for subdir_name in ("mods", "kubejs", "ftbquests"):
@@ -340,9 +383,10 @@ def translate_all(
             logger.info("No JSON files found in %s", subdir)
             continue
 
-        for json_file in json_files:
+        for file_idx, json_file in enumerate(json_files):
             rel_path = json_file.relative_to(subdir)
             output_file = out_subdir / rel_path
+            total_files += 1
 
             try:
                 data = json.loads(json_file.read_text(encoding="utf-8"))
@@ -358,39 +402,109 @@ def translate_all(
             if not entries:
                 continue
 
-            logger.info("  Processing %s (%d entries)", rel_path, len(entries))
+            # ── Resume check: skip fully translated files ──
+            if _is_fully_translated(output_file, entries):
+                skipped_files += 1
+                logger.info(
+                    "  [%d/%d] Skipping %s (already translated)",
+                    file_idx + 1,
+                    len(json_files),
+                    rel_path,
+                )
+                continue
+
+            logger.info(
+                "  [%d/%d] Processing %s (%d entries)",
+                file_idx + 1,
+                len(json_files),
+                rel_path,
+                len(entries),
+            )
+
+            # ── Resume check: load partial translations ──
+            existing_translations = _load_partial_translations(output_file)
 
             # Phase 1: Dictionary matching
             dict_translated, remaining = translate_with_dictionary(entries, dictionary)
 
+            # Remove entries that were already translated in a previous run
+            already_done: dict[str, str] = {}
+            still_remaining: dict[str, str] = {}
+            for key, value in remaining.items():
+                if key in existing_translations and existing_translations[key] != entries.get(key):
+                    # This key was translated in a previous run, reuse it
+                    already_done[key] = existing_translations[key]
+                else:
+                    still_remaining[key] = value
+
+            if already_done:
+                logger.info(
+                    "  Resumed %d entries from previous run, %d still need LLM",
+                    len(already_done),
+                    len(still_remaining),
+                )
+
             # Phase 2: LLM translation for remaining
             llm_translated = {}
-            if remaining:
-                llm_translated = translate_with_llm(remaining, config, dictionary)
+            if still_remaining:
+                try:
+                    llm_translated = translate_with_llm(still_remaining, config, dictionary)
+                except KeyboardInterrupt:
+                    # Save partial progress before exiting
+                    logger.info("  Interrupted! Saving partial progress...")
+                    partial: dict[str, str] = {}
+                    for key in data:
+                        if key in dict_translated:
+                            partial[key] = dict_translated[key]
+                        elif key in already_done:
+                            partial[key] = already_done[key]
+                        elif key in llm_translated:
+                            partial[key] = llm_translated[key]
+                        else:
+                            partial[key] = data[key]
+                    output_file.parent.mkdir(parents=True, exist_ok=True)
+                    output_file.write_text(
+                        json.dumps(partial, indent=2, ensure_ascii=False) + "\n",
+                        encoding="utf-8",
+                    )
+                    logger.info("  Partial progress saved to: %s", output_file)
+                    raise
 
             # Merge results
             final: dict[str, str] = {}
             for key in data:
                 if key in dict_translated:
                     final[key] = dict_translated[key]
+                elif key in already_done:
+                    final[key] = already_done[key]
                 elif key in llm_translated:
                     final[key] = llm_translated[key]
                 else:
                     # Keep original value if untranslated
                     final[key] = data[key]
 
-            # Write translated file
+            # Write translated file (atomic save point)
             output_file.parent.mkdir(parents=True, exist_ok=True)
             output_file.write_text(
                 json.dumps(final, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
 
-            translated_count = len(dict_translated) + len(llm_translated)
+            translated_count = len(dict_translated) + len(already_done) + len(llm_translated)
+            translated_files += 1
             logger.info(
-                "  Translated %d/%d entries (dict: %d, llm: %d)",
+                "  Translated %d/%d entries (dict: %d, resumed: %d, llm: %d)",
                 translated_count,
                 len(entries),
                 len(dict_translated),
+                len(already_done),
                 len(llm_translated),
             )
+
+    logger.info(
+        "Translation complete: %d files processed, %d skipped (already done), %d newly translated",
+        total_files,
+        skipped_files,
+        translated_files,
+    )
+

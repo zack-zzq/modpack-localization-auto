@@ -26,8 +26,8 @@ def _setup_logging() -> None:
 
 
 def run_pipeline(config: AppConfig) -> None:
-    """Execute the full localization pipeline."""
-    # Check if we already have this version
+    """Execute the full localization pipeline with resumption support."""
+    # Check if we already have a FINISHED localization for this version
     existing = ModpackInfo.load(config.version_file)
     if existing:
         logger.info(
@@ -52,20 +52,39 @@ def run_pipeline(config: AppConfig) -> None:
             logger.warning("Could not check for updates, proceeding anyway")
 
     # ── Step 1: Download & Install ────────────────────────────────
-    logger.info("=" * 60)
-    logger.info("STEP 1: Download & Install modpack '%s'", config.slug)
-    logger.info("=" * 60)
+    # Check if we already have a working install (from an interrupted run)
+    install_checkpoint = config.work_dir / "modpack_info.json"
+    modpack_info = ModpackInfo.load(install_checkpoint)
 
-    modpack_info = download_and_install(config)
-    install_dir = Path(modpack_info.install_dir)
+    if modpack_info and Path(modpack_info.install_dir).exists():
+        install_dir = Path(modpack_info.install_dir)
+        logger.info("=" * 60)
+        logger.info("STEP 1: Resuming from existing install")
+        logger.info(
+            "  %s v%s (MC %s, file_id=%d)",
+            modpack_info.name,
+            modpack_info.version,
+            modpack_info.mc_version,
+            modpack_info.file_id,
+        )
+        logger.info("=" * 60)
+    else:
+        logger.info("=" * 60)
+        logger.info("STEP 1: Download & Install modpack '%s'", config.slug)
+        logger.info("=" * 60)
 
-    logger.info(
-        "Installed: %s v%s (MC %s, file_id=%d)",
-        modpack_info.name,
-        modpack_info.version,
-        modpack_info.mc_version,
-        modpack_info.file_id,
-    )
+        modpack_info = download_and_install(config)
+        install_dir = Path(modpack_info.install_dir)
+
+        # Save checkpoint immediately so we can resume if interrupted later
+        modpack_info.save(install_checkpoint)
+        logger.info(
+            "Installed: %s v%s (MC %s, file_id=%d)",
+            modpack_info.name,
+            modpack_info.version,
+            modpack_info.mc_version,
+            modpack_info.file_id,
+        )
 
     # ── Step 2: Extract ───────────────────────────────────────────
     logger.info("=" * 60)
@@ -79,7 +98,7 @@ def run_pipeline(config: AppConfig) -> None:
         logger.warning("No translatable content found. Exiting.")
         return
 
-    # ── Step 3: Translate ─────────────────────────────────────────
+    # ── Step 3: Translate (supports resumption) ───────────────────
     logger.info("=" * 60)
     logger.info("STEP 3: Translate (%d total keys)", total_keys)
     logger.info("=" * 60)
