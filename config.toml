@@ -3,7 +3,7 @@
 
 [modpack]
 # CurseForge modpack slugs to process
-slugs = ["create-stellar"]
+slugs = ["create-stellar", "better-mc-neoforge-bmc5"]
 
 [translation]
 # Target language code for Minecraft lang files
