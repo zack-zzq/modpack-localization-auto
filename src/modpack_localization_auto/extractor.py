@@ -117,14 +117,24 @@ def extract_ftbquests(install_dir: Path, output_dir: Path, modpack_name: str) ->
 
     # Check format: new (1.20+) has lang/ subdirectory
     lang_dir = quests_dir / "lang"
-    if lang_dir.is_dir():
-        # New format: split SNBT lang files into JSON
+    lang_file = quests_dir / "lang" / "en_us.snbt"
+    
+    if lang_dir.is_dir() and (lang_dir / "en_us").is_dir():
+        # New format (split): split SNBT lang files into JSON
         from ftb_quest_localizer.splitter import split_lang_files
 
         logger.info("Detected new-format FTB Quests (1.20+) with lang/ directory")
         results = split_lang_files(quests_dir, ftbq_output)
         total = sum(results.values()) if results else 0
-        logger.info("FTB Quests extraction (new format): %d entries", total)
+        logger.info("FTB Quests extraction (new format split): %d entries", total)
+        return total
+    elif lang_file.is_file():
+        # New format (single file): export en_us.snbt to en_us.json
+        from ftb_quest_localizer.splitter import extract_single_file_lang
+
+        logger.info("Detected new-format FTB Quests (1.20+) single-file export")
+        total = extract_single_file_lang(lang_file, ftbq_output)
+        logger.info("FTB Quests extraction (new format single-file): %d entries", total)
         return total
     else:
         # Old format: extract inline strings from chapter files

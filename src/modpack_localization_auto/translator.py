@@ -190,11 +190,21 @@ def translate_with_llm(
         return {}
 
     from openai import APITimeoutError, APIConnectionError
+    import httpx
+
+    # Create a strict timeout to prevent indefinite hangs
+    timeout = httpx.Timeout(
+        connect=15.0,
+        read=config.llm_timeout,
+        write=15.0,
+        pool=15.0,
+    )
+    http_client = httpx.Client(timeout=timeout)
 
     client = OpenAI(
         base_url=config.openai_base_url or None,
         api_key=config.openai_api_key,
-        timeout=config.llm_timeout,
+        http_client=http_client,
         max_retries=0,  # We handle retries ourselves
     )
 
@@ -226,16 +236,24 @@ def translate_with_llm(
         user_content = json.dumps(batch, indent=2, ensure_ascii=False)
 
         # Retry logic with exponential backoff
+        import concurrent.futures
+
         for attempt in range(max_retries):
             try:
-                response = client.chat.completions.create(
-                    model=config.openai_model_id,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_content},
-                    ],
-                    temperature=config.llm_temperature,
-                )
+                def _do_request():
+                    return client.chat.completions.create(
+                        model=config.openai_model_id,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_content},
+                        ],
+                        temperature=config.llm_temperature,
+                    )
+                
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_do_request)
+                    # Use a hard timeout slightly larger than httpx timeout
+                    response = future.result(timeout=config.llm_timeout + 30)
 
                 content = response.choices[0].message.content or ""
                 # Try to extract JSON from response (handle markdown code blocks)
@@ -263,10 +281,10 @@ def translate_with_llm(
                 else:
                     logger.warning("  Batch %d: unexpected response type", batch_idx + 1)
 
-            except (APITimeoutError, APIConnectionError) as e:
+            except Exception as e:
                 backoff = min(2 ** (attempt + 1), 30)
                 logger.warning(
-                    "  Batch %d attempt %d/%d: timeout/connection error, "
+                    "  Batch %d attempt %d/%d: error, "
                     "retrying in %ds: %s",
                     batch_idx + 1,
                     attempt + 1,

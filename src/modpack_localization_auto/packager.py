@@ -115,6 +115,25 @@ def build_resource_pack(
                 except Exception as e:
                     logger.warning("  Failed to pack KubeJS lang: %s", e)
 
+        # Detect FTB Quests single-file format
+        ftbq_install_dir = None
+        install_dir = config.work_dir / "instance"
+        for p in [
+            install_dir / "config" / "ftbquests" / "quests",
+            install_dir / "ftbquests" / "quests",
+            install_dir / "config" / "ftbquests",
+        ]:
+            if p.is_dir():
+                ftbq_install_dir = p
+                break
+                
+        is_single_file_format = False
+        if ftbq_install_dir:
+            lang_file = ftbq_install_dir / "lang" / "en_us.snbt"
+            lang_dir = ftbq_install_dir / "lang" / "en_us"
+            if lang_file.is_file() and not lang_dir.is_dir():
+                is_single_file_format = True
+
         # 3. FTB Quests lang -> assets/ftbquests/lang/zh_cn.json
         # Merges mod UI strings + quest content translations into one file
         ftbq_merged: dict[str, str] = {}
@@ -126,12 +145,13 @@ def build_resource_pack(
             except Exception:
                 pass
         # b) Quest content lang (extracted quest strings)
-        ftbq_quest_lang = translated_dir / "ftbquests" / "en_us.json"
-        if ftbq_quest_lang.exists():
-            try:
-                ftbq_merged.update(json.loads(ftbq_quest_lang.read_text(encoding="utf-8")))
-            except Exception:
-                pass
+        if not is_single_file_format:
+            ftbq_quest_lang = translated_dir / "ftbquests" / "en_us.json"
+            if ftbq_quest_lang.exists():
+                try:
+                    ftbq_merged.update(json.loads(ftbq_quest_lang.read_text(encoding="utf-8")))
+                except Exception:
+                    pass
         if ftbq_merged:
             pack_path = f"assets/ftbquests/lang/{config.target_lang}.json"
             zf.writestr(
@@ -139,10 +159,11 @@ def build_resource_pack(
                 json.dumps(ftbq_merged, indent=2, ensure_ascii=False) + "\n",
             )
             file_count += 1
+            has_quest_lang = not is_single_file_format and translated_dir.joinpath("ftbquests", "en_us.json").exists()
             logger.info("  Packed FTB Quests lang: %d keys (mod: %s, quests: %s)",
                         len(ftbq_merged),
                         "yes" if ftbq_mod_lang.exists() else "no",
-                        "yes" if ftbq_quest_lang.exists() else "no")
+                        "yes" if has_quest_lang else "skipped (single-file override)")
 
         # 3. misc-localization-packs assets
         misc_assets = misc_packs_dir / "assets"
@@ -183,17 +204,56 @@ def build_overrides_pack(
     file_count = 0
 
     with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-        # 1. FTB Quests: pack extracted SNBT files (with {key} refs) as overrides
-        # Old format: modified SNBT files replace originals at config/ftbquests/quests/
+        # Detect FTB Quests format from install dir
+        ftbq_install_dir = None
+        for p in [
+            install_dir / "config" / "ftbquests" / "quests",
+            install_dir / "ftbquests" / "quests",
+            install_dir / "config" / "ftbquests",
+        ]:
+            if p.is_dir():
+                ftbq_install_dir = p
+                break
+                
+        is_single_file_format = False
+        if ftbq_install_dir:
+            lang_file = ftbq_install_dir / "lang" / "en_us.snbt"
+            lang_dir = ftbq_install_dir / "lang" / "en_us"
+            if lang_file.is_file() and not lang_dir.is_dir():
+                is_single_file_format = True
+
+        # 1. FTB Quests: pack overrides
         extracted_dir = Path(str(translated_dir).replace("translated", "extracted"))
         ftbq_extracted = extracted_dir / "ftbquests"
-        if ftbq_extracted.is_dir():
+        ftbq_translated = translated_dir / "ftbquests" / "en_us.json"
+        
+        if is_single_file_format and ftbq_translated.exists():
+            # Single-file format: convert translated JSON directly to lang/zh_cn.snbt
+            try:
+                data = json.loads(ftbq_translated.read_text(encoding="utf-8"))
+                # Write back as SNBT string
+                lines = ["{"]
+                for k, v in data.items():
+                    k_esc = json.dumps(k, ensure_ascii=False)
+                    v_esc = json.dumps(v, ensure_ascii=False)
+                    lines.append(f"\t{k_esc}: {v_esc}")
+                lines.append("}")
+                snbt_content = "\n".join(lines) + "\n"
+                
+                zip_path = f"config/ftbquests/quests/lang/{config.target_lang}.snbt"
+                zf.writestr(zip_path, snbt_content.encode("utf-8"))
+                file_count += 1
+                logger.info("  Packed FTB Quests lang override as single SNBT: %s", zip_path)
+            except Exception as e:
+                logger.warning("  Failed to pack single-file FTB Quests override: %s", e)
+        elif ftbq_extracted.is_dir():
+            # Old format: modified SNBT files replace originals at config/ftbquests/quests/
             for snbt_file in ftbq_extracted.rglob("*.snbt"):
                 rel = snbt_file.relative_to(ftbq_extracted)
                 zip_path = f"config/ftbquests/quests/{str(rel).replace(chr(92), '/')}"
                 zf.write(snbt_file, zip_path)
                 file_count += 1
-            if file_count > 0:
+            if file_count > 0 and not is_single_file_format:
                 logger.info("  Packed FTB Quests SNBT overrides (%d files)", file_count)
 
         # 2. KubeJS rewritten scripts
