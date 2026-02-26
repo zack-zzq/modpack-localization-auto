@@ -72,6 +72,9 @@ def build_resource_pack(
                 if not modid_dir.is_dir():
                     continue
                 modid = modid_dir.name
+                # ftbquests is handled separately (merged with quest lang)
+                if modid == "ftbquests":
+                    continue
                 lang_file = modid_dir / "en_us.json"
                 if not lang_file.exists():
                     continue
@@ -112,6 +115,35 @@ def build_resource_pack(
                 except Exception as e:
                     logger.warning("  Failed to pack KubeJS lang: %s", e)
 
+        # 3. FTB Quests lang -> assets/ftbquests/lang/zh_cn.json
+        # Merges mod UI strings + quest content translations into one file
+        ftbq_merged: dict[str, str] = {}
+        # a) Mod ftbquests lang (UI strings like "block.ftbquests.*")
+        ftbq_mod_lang = translated_dir / "mods" / "ftbquests" / "en_us.json"
+        if ftbq_mod_lang.exists():
+            try:
+                ftbq_merged.update(json.loads(ftbq_mod_lang.read_text(encoding="utf-8")))
+            except Exception:
+                pass
+        # b) Quest content lang (extracted quest strings)
+        ftbq_quest_lang = translated_dir / "ftbquests" / "en_us.json"
+        if ftbq_quest_lang.exists():
+            try:
+                ftbq_merged.update(json.loads(ftbq_quest_lang.read_text(encoding="utf-8")))
+            except Exception:
+                pass
+        if ftbq_merged:
+            pack_path = f"assets/ftbquests/lang/{config.target_lang}.json"
+            zf.writestr(
+                pack_path,
+                json.dumps(ftbq_merged, indent=2, ensure_ascii=False) + "\n",
+            )
+            file_count += 1
+            logger.info("  Packed FTB Quests lang: %d keys (mod: %s, quests: %s)",
+                        len(ftbq_merged),
+                        "yes" if ftbq_mod_lang.exists() else "no",
+                        "yes" if ftbq_quest_lang.exists() else "no")
+
         # 3. misc-localization-packs assets
         misc_assets = misc_packs_dir / "assets"
         if misc_assets.is_dir():
@@ -151,37 +183,25 @@ def build_overrides_pack(
     file_count = 0
 
     with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-        # 1. FTB Quests: merge translated JSON back to SNBT and pack
-        ftbq_translated = translated_dir / "ftbquests"
-        if ftbq_translated.is_dir():
-            json_files = sorted(ftbq_translated.rglob("*.json"))
-            if json_files:
-                # Merge JSON to SNBT lang dir
-                from ftb_quest_localizer.merger import merge_json_to_lang_dir
-
-                lang_output = translated_dir / "ftbquests_merged" / config.target_lang
-                lang_output.mkdir(parents=True, exist_ok=True)
-
-                try:
-                    merge_json_to_lang_dir(ftbq_translated, lang_output)
-
-                    # Add merged SNBT files to zip
-                    for snbt_file in lang_output.rglob("*"):
-                        if snbt_file.is_file():
-                            rel = snbt_file.relative_to(translated_dir / "ftbquests_merged")
-                            # Place under config/ftbquests/quests/lang/
-                            zip_path = f"config/ftbquests/quests/lang/{str(rel).replace(chr(92), '/')}"
-                            zf.write(snbt_file, zip_path)
-                            file_count += 1
-                    logger.info("  Packed FTB Quests SNBT overrides")
-                except Exception as e:
-                    logger.warning("  Failed to merge FTB Quests: %s", e)
+        # 1. FTB Quests: pack extracted SNBT files (with {key} refs) as overrides
+        # Old format: modified SNBT files replace originals at config/ftbquests/quests/
+        extracted_dir = Path(str(translated_dir).replace("translated", "extracted"))
+        ftbq_extracted = extracted_dir / "ftbquests"
+        if ftbq_extracted.is_dir():
+            for snbt_file in ftbq_extracted.rglob("*.snbt"):
+                rel = snbt_file.relative_to(ftbq_extracted)
+                zip_path = f"config/ftbquests/quests/{str(rel).replace(chr(92), '/')}"
+                zf.write(snbt_file, zip_path)
+                file_count += 1
+            if file_count > 0:
+                logger.info("  Packed FTB Quests SNBT overrides (%d files)", file_count)
 
         # 2. KubeJS rewritten scripts
         # The extractor rewrites JS files with Text.translatable() calls
         # They're saved in extracted/kubejs/{client_scripts,server_scripts,...}/
-        kubejs_extracted = Path(str(translated_dir).replace("translated", "extracted")) / "kubejs"
+        kubejs_extracted = extracted_dir / "kubejs"
         if kubejs_extracted.is_dir():
+            kubejs_count = 0
             script_dirs = ("client_scripts", "server_scripts", "startup_scripts")
             for script_dir_name in script_dirs:
                 script_dir = kubejs_extracted / script_dir_name
@@ -192,21 +212,21 @@ def build_overrides_pack(
                     zip_path = f"kubejs/{str(rel).replace(chr(92), '/')}"
                     zf.write(js_file, zip_path)
                     file_count += 1
-            if file_count > 0:
-                logger.info("  Packed KubeJS script overrides")
+                    kubejs_count += 1
+            if kubejs_count > 0:
+                logger.info("  Packed KubeJS script overrides (%d files)", kubejs_count)
 
-        # 3. misc-localization-packs: config and scripts directories
+        # 3. misc-localization-packs: config directory only (no scripts)
         misc_packs = Path(__file__).resolve().parents[2] / "libs" / "misc-localization-packs"
-        for dirname in ("config", "scripts"):
-            misc_subdir = misc_packs / dirname
-            if misc_subdir.is_dir():
-                for item in misc_subdir.rglob("*"):
-                    if item.is_file():
-                        rel = item.relative_to(misc_packs)
-                        zip_path = str(rel).replace("\\", "/")
-                        zf.write(item, zip_path)
-                        file_count += 1
-                logger.info("  Packed misc-localization-packs %s/", dirname)
+        misc_config = misc_packs / "config"
+        if misc_config.is_dir():
+            for item in misc_config.rglob("*"):
+                if item.is_file():
+                    rel = item.relative_to(misc_packs)
+                    zip_path = str(rel).replace("\\", "/")
+                    zf.write(item, zip_path)
+                    file_count += 1
+            logger.info("  Packed misc-localization-packs config/")
 
     if file_count > 0:
         logger.info("Overrides pack created: %s (%d files)", output_zip.name, file_count)

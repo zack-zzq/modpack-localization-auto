@@ -92,7 +92,7 @@ wheels = [
 
 [[package]]
 name = "ftb-quest-localizer"
-version = "2.0.2"
+version = "2.0.3"
 source = { directory = "libs/FTBQuestLocalizerPython" }
 dependencies = [
     { name = "click" },
