@@ -42,6 +42,10 @@ class AppConfig:
     # CurseForge (from .env)
     curseforge_api_key: str = ""
 
+    # GitHub / Dict repo (from .env)
+    github_token: str = ""
+    dict_repo: str = "zack-zzq/i18n-Dict-Merged"
+
     # Paths
     project_root: Path = field(default_factory=lambda: _PROJECT_ROOT)
 
@@ -84,4 +88,6 @@ def load_config(config_path: Path | None = None) -> AppConfig:
         openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
         openai_model_id=os.environ.get("OPENAI_MODEL_ID", ""),
         curseforge_api_key=os.environ.get("CURSEFORGE_API_KEY", ""),
+        github_token=os.environ.get("GITHUB_TOKEN", ""),
+        dict_repo=toml_data.get("upload", {}).get("dict_repo", "zack-zzq/i18n-Dict-Merged"),
     )

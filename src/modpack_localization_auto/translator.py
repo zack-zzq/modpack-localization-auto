@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # ── Dictionary loader ──────────────────────────────────────────────
 
 DICT_MINI_URL = (
-    "https://github.com/VM-Chinese-translate-group/i18n-Dict-Extender"
+    "https://github.com/zack-zzq/i18n-Dict-Merged"
     "/releases/latest/download/Dict-Mini.json"
 )
 
@@ -375,6 +375,9 @@ def translate_all(
     skipped_files = 0
     translated_files = 0
 
+    # Track which mods used LLM translation (for upload filtering)
+    llm_translated_mods: set[str] = set()
+
     # Process each extraction type
     for subdir_name in ("mods", "kubejs", "ftbquests"):
         subdir = extracted_dir / subdir_name
@@ -485,6 +488,13 @@ def translate_all(
 
             translated_count = len(dict_translated) + len(already_done) + len(llm_translated)
             translated_files += 1
+
+            # Record if this mod used LLM (for upload filtering)
+            if (llm_translated or already_done) and subdir_name == "mods":
+                # rel_path is like "modid/en_us.json", extract modid
+                modid = rel_path.parts[0] if len(rel_path.parts) > 1 else rel_path.stem
+                llm_translated_mods.add(modid)
+
             logger.info(
                 "  Translated %d/%d entries (dict: %d, resumed: %d, llm: %d)",
                 translated_count,
@@ -494,10 +504,27 @@ def translate_all(
                 len(llm_translated),
             )
 
+    # Save manifest of LLM-translated mods
+    manifest_path = translated_dir / "mods" / "_llm_translated.json"
+    if llm_translated_mods:
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        # Merge with existing manifest (from previous interrupted runs)
+        existing_mods: list[str] = []
+        if manifest_path.exists():
+            try:
+                existing_mods = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        all_llm_mods = sorted(set(existing_mods) | llm_translated_mods)
+        manifest_path.write_text(
+            json.dumps(all_llm_mods, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        logger.info("LLM-translated mods manifest: %d mods", len(all_llm_mods))
+
     logger.info(
         "Translation complete: %d files processed, %d skipped (already done), %d newly translated",
         total_files,
         skipped_files,
         translated_files,
     )
-

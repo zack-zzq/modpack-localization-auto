@@ -26,3 +26,10 @@ llm_max_retries = 3
 
 # CurseForge API key is read from .env:
 #   CURSEFORGE_API_KEY
+
+[upload]
+# Target repo for uploading translated mod files (assets/{mc_version}/{modid}/)
+dict_repo = "zack-zzq/i18n-Dict-Merged"
+
+# GitHub token is read from env:
+#   GITHUB_TOKEN — requires repo write access to dict_repo

@@ -13,6 +13,7 @@ from .downloader import ModpackInfo, download_and_install, check_for_update
 from .extractor import extract_all
 from .translator import translate_all
 from .packager import package_all
+from .uploader import upload_to_dict_repo
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,18 @@ def run_pipeline(config: AppConfig) -> None:
 
     package_all(config.work_dir, install_dir, config.output_dir, config)
 
-    # ── Step 5: Save version info ─────────────────────────────────
+    # ── Step 5: Upload to Dict ────────────────────────────────────
+    logger.info("=" * 60)
+    logger.info("STEP 5: Upload translations to %s", config.dict_repo)
+    logger.info("=" * 60)
+
+    upload_to_dict_repo(
+        extracted_dir, translated_dir,
+        mc_version=modpack_info.mc_version,
+        config=config,
+    )
+
+    # ── Step 6: Save version info ─────────────────────────────────
     modpack_info.save(config.version_file)
     logger.info("Version info saved to: %s", config.version_file)
 
