@@ -177,16 +177,23 @@ def build_overrides_pack(
                 except Exception as e:
                     logger.warning("  Failed to merge FTB Quests: %s", e)
 
-        # 2. KubeJS rewritten scripts (if any exist in extracted dir)
-        # The kubejs extractor rewrites JS files — include them as overrides
-        kubejs_scripts = translated_dir / "kubejs" / "kubejs"
-        if kubejs_scripts.is_dir():
-            for js_file in kubejs_scripts.rglob("*.js"):
-                rel = js_file.relative_to(translated_dir / "kubejs" / "kubejs")
-                zip_path = f"kubejs/{str(rel).replace(chr(92), '/')}"
-                zf.write(js_file, zip_path)
-                file_count += 1
-            logger.info("  Packed KubeJS script overrides")
+        # 2. KubeJS rewritten scripts
+        # The extractor rewrites JS files with Text.translatable() calls
+        # They're saved in extracted/kubejs/{client_scripts,server_scripts,...}/
+        kubejs_extracted = Path(str(translated_dir).replace("translated", "extracted")) / "kubejs"
+        if kubejs_extracted.is_dir():
+            script_dirs = ("client_scripts", "server_scripts", "startup_scripts")
+            for script_dir_name in script_dirs:
+                script_dir = kubejs_extracted / script_dir_name
+                if not script_dir.is_dir():
+                    continue
+                for js_file in script_dir.rglob("*.js"):
+                    rel = js_file.relative_to(kubejs_extracted)
+                    zip_path = f"kubejs/{str(rel).replace(chr(92), '/')}"
+                    zf.write(js_file, zip_path)
+                    file_count += 1
+            if file_count > 0:
+                logger.info("  Packed KubeJS script overrides")
 
         # 3. misc-localization-packs: config and scripts directories
         misc_packs = Path(__file__).resolve().parents[2] / "libs" / "misc-localization-packs"

@@ -48,6 +48,7 @@ def extract_kubejs(install_dir: Path, output_dir: Path) -> int:
     """Extract translatable strings from KubeJS scripts."""
     from kubejs_string_extractor.extractor import extract_from_directory
     from kubejs_string_extractor.keygen import generate_keys
+    from kubejs_string_extractor.rewriter import rewrite_directory
     from kubejs_string_extractor.writer import write_lang_json
 
     kubejs_dir = install_dir / "kubejs"
@@ -79,6 +80,15 @@ def extract_kubejs(install_dir: Path, output_dir: Path) -> int:
     kubejs_output = output_dir / "kubejs"
     kubejs_output.mkdir(parents=True, exist_ok=True)
     write_lang_json(translations, kubejs_output, namespace="kubejs_string_extractor")
+
+    # Rewrite .js files: replace hardcoded strings with Text.translatable() calls
+    # These modified scripts go into the overrides pack
+    string_to_key = {v: k for k, v in translations.items()}
+    rewrite_results = rewrite_directory(kubejs_dir, string_to_key, output_dir=kubejs_output)
+    logger.info(
+        "Rewrote %d KubeJS files with Text.translatable() calls",
+        len(rewrite_results),
+    )
 
     return len(translations)
 
