@@ -216,18 +216,6 @@ def build_overrides_pack(
             if kubejs_count > 0:
                 logger.info("  Packed KubeJS script overrides (%d files)", kubejs_count)
 
-        # 3. misc-localization-packs: config directory only (no scripts)
-        misc_packs = Path(__file__).resolve().parents[2] / "libs" / "misc-localization-packs"
-        misc_config = misc_packs / "config"
-        if misc_config.is_dir():
-            for item in misc_config.rglob("*"):
-                if item.is_file():
-                    rel = item.relative_to(misc_packs)
-                    zip_path = str(rel).replace("\\", "/")
-                    zf.write(item, zip_path)
-                    file_count += 1
-            logger.info("  Packed misc-localization-packs config/")
-
     if file_count > 0:
         logger.info("Overrides pack created: %s (%d files)", output_zip.name, file_count)
     else:
