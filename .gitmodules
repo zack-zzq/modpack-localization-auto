@@ -10,9 +10,9 @@
 [submodule "libs/misc-localization-packs"]
 	path = libs/misc-localization-packs
 	url = https://github.com/zack-zzq/misc-localization-packs.git
-[submodule "libs/i18n-Dict-Extender"]
-	path = libs/i18n-Dict-Extender
-	url = https://github.com/VM-Chinese-translate-group/i18n-Dict-Extender.git
 [submodule "libs/mods-string-extractor"]
 	path = libs/mods-string-extractor
 	url = https://github.com/zack-zzq/mods-string-extractor.git
+[submodule "libs/i18n-Dict-Merged"]
+	path = libs/i18n-Dict-Merged
+	url = https://github.com/zack-zzq/i18n-Dict-Merged.git
