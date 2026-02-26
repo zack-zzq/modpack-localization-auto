@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx
@@ -166,6 +167,7 @@ def translate_with_llm(
     entries: dict[str, str],
     config: AppConfig,
     dictionary: dict[str, list[str]] | None = None,
+    on_batch_done: "Callable[[dict[str, str]], None] | None" = None,
 ) -> dict[str, str]:
     """Translate entries using OpenAI-compatible LLM API.
 
@@ -173,6 +175,9 @@ def translate_with_llm(
         entries: Mapping of translation_key -> english_value.
         config: App configuration with LLM settings.
         dictionary: Optional Dict-Mini.json for context injection.
+        on_batch_done: Optional callback invoked after each successful batch
+            with the cumulative translated dict so far. Use this to save
+            progress to disk in real-time.
 
     Returns:
         Mapping of translation_key -> translated_value.
@@ -251,6 +256,9 @@ def translate_with_llm(
                         batch_idx + 1,
                         len(result),
                     )
+                    # Real-time progress callback
+                    if on_batch_done is not None:
+                        on_batch_done(translated)
                     break
                 else:
                     logger.warning("  Batch %d: unexpected response type", batch_idx + 1)
@@ -444,51 +452,36 @@ def translate_all(
                     len(still_remaining),
                 )
 
+            # Build a helper to merge & save current state to disk
+            def _save_progress(llm_so_far: dict[str, str]) -> None:
+                """Flush current translation state to disk (called after each LLM batch)."""
+                merged: dict[str, str] = {}
+                for key in data:
+                    if key in dict_translated:
+                        merged[key] = dict_translated[key]
+                    elif key in already_done:
+                        merged[key] = already_done[key]
+                    elif key in llm_so_far:
+                        merged[key] = llm_so_far[key]
+                    else:
+                        merged[key] = data[key]
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+                output_file.write_text(
+                    json.dumps(merged, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
+
             # Phase 2: LLM translation for remaining
+            # on_batch_done saves to disk after every batch — crash-safe
             llm_translated = {}
             if still_remaining:
-                try:
-                    llm_translated = translate_with_llm(still_remaining, config, dictionary)
-                except KeyboardInterrupt:
-                    # Save partial progress before exiting
-                    logger.info("  Interrupted! Saving partial progress...")
-                    partial: dict[str, str] = {}
-                    for key in data:
-                        if key in dict_translated:
-                            partial[key] = dict_translated[key]
-                        elif key in already_done:
-                            partial[key] = already_done[key]
-                        elif key in llm_translated:
-                            partial[key] = llm_translated[key]
-                        else:
-                            partial[key] = data[key]
-                    output_file.parent.mkdir(parents=True, exist_ok=True)
-                    output_file.write_text(
-                        json.dumps(partial, indent=2, ensure_ascii=False) + "\n",
-                        encoding="utf-8",
-                    )
-                    logger.info("  Partial progress saved to: %s", output_file)
-                    raise
+                llm_translated = translate_with_llm(
+                    still_remaining, config, dictionary,
+                    on_batch_done=_save_progress,
+                )
 
-            # Merge results
-            final: dict[str, str] = {}
-            for key in data:
-                if key in dict_translated:
-                    final[key] = dict_translated[key]
-                elif key in already_done:
-                    final[key] = already_done[key]
-                elif key in llm_translated:
-                    final[key] = llm_translated[key]
-                else:
-                    # Keep original value if untranslated
-                    final[key] = data[key]
-
-            # Write translated file (atomic save point)
-            output_file.parent.mkdir(parents=True, exist_ok=True)
-            output_file.write_text(
-                json.dumps(final, indent=2, ensure_ascii=False) + "\n",
-                encoding="utf-8",
-            )
+            # Final write (ensures dict-only files are also saved)
+            _save_progress(llm_translated)
 
             translated_count = len(dict_translated) + len(already_done) + len(llm_translated)
             translated_files += 1
