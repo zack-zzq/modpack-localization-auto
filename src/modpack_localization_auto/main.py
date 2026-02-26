@@ -144,10 +144,18 @@ def main() -> None:
     """CLI entry point."""
     _setup_logging()
 
-    # Allow passing config path as argument
-    config_path = None
-    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
-        config_path = Path(sys.argv[1])
+    # Parse arguments
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="modpack-localize",
+        description="Modpack Localization Auto",
+    )
+    parser.add_argument("config", nargs="?", default=None, help="Path to config.toml")
+    parser.add_argument("--slug", dest="only_slug", default=None, help="Only process this slug")
+    args = parser.parse_args()
+
+    config_path = Path(args.config) if args.config else None
 
     try:
         config = load_config(config_path)
@@ -155,17 +163,35 @@ def main() -> None:
         logger.error("Failed to load configuration: %s", e)
         sys.exit(1)
 
+    # Determine which slugs to process
+    slugs = config.slugs
+    if args.only_slug:
+        if args.only_slug not in slugs:
+            logger.warning("Slug '%s' not in config, running anyway", args.only_slug)
+        slugs = [args.only_slug]
+
     logger.info("Modpack Localization Auto v0.1.0")
-    logger.info("Slug: %s", config.slug)
+    logger.info("Slugs: %s", ", ".join(slugs))
     logger.info("Target lang: %s", config.target_lang)
 
-    try:
-        run_pipeline(config)
-    except KeyboardInterrupt:
-        logger.info("\nInterrupted by user.")
-        sys.exit(130)
-    except Exception as e:
-        logger.error("Pipeline failed: %s", e, exc_info=True)
+    failed: list[str] = []
+    for i, slug in enumerate(slugs):
+        config.slug = slug
+        logger.info("")
+        logger.info("━" * 60)
+        logger.info("Processing modpack %d/%d: %s", i + 1, len(slugs), slug)
+        logger.info("━" * 60)
+        try:
+            run_pipeline(config)
+        except KeyboardInterrupt:
+            logger.info("\nInterrupted by user.")
+            sys.exit(130)
+        except Exception as e:
+            logger.error("Pipeline failed for '%s': %s", slug, e, exc_info=True)
+            failed.append(slug)
+
+    if failed:
+        logger.error("Failed slugs: %s", ", ".join(failed))
         sys.exit(1)
 
 

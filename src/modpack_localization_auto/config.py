@@ -24,7 +24,7 @@ class AppConfig:
     """Application configuration."""
 
     # Modpack
-    slug: str = "all-the-mods-10"
+    slugs: list[str] = field(default_factory=lambda: ["all-the-mods-10"])
 
     # Translation
     target_lang: str = "zh_cn"
@@ -49,13 +49,24 @@ class AppConfig:
     # Paths
     project_root: Path = field(default_factory=lambda: _PROJECT_ROOT)
 
+    # ── Per-slug path helpers (set slug before using) ──
+    _current_slug: str = ""
+
+    @property
+    def slug(self) -> str:
+        return self._current_slug
+
+    @slug.setter
+    def slug(self, value: str) -> None:
+        self._current_slug = value
+
     @property
     def work_dir(self) -> Path:
-        return self.project_root / "work" / self.slug
+        return self.project_root / "work" / self._current_slug
 
     @property
     def output_dir(self) -> Path:
-        return self.project_root / "output" / self.slug
+        return self.project_root / "output" / self._current_slug
 
     @property
     def version_file(self) -> Path:
@@ -76,8 +87,14 @@ def load_config(config_path: Path | None = None) -> AppConfig:
     modpack = toml_data.get("modpack", {})
     translation = toml_data.get("translation", {})
 
+    # Support both "slug" (single) and "slugs" (list) for backward compat
+    slugs = modpack.get("slugs", [])
+    if not slugs:
+        single = modpack.get("slug", "all-the-mods-10")
+        slugs = [single]
+
     return AppConfig(
-        slug=modpack.get("slug", "all-the-mods-10"),
+        slugs=slugs,
         target_lang=translation.get("target_lang", "zh_cn"),
         pack_format=translation.get("pack_format", 34),
         llm_batch_size=translation.get("llm_batch_size", 50),

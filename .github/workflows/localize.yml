@@ -37,15 +37,7 @@ jobs:
           CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
         run: |
           # Quick check: compare stored version with latest CurseForge file_id
-          if [ -f "output/$(grep -oP 'slug\s*=\s*"\K[^"]+' config.toml)/version.json" ]; then
-            SLUG=$(grep -oP 'slug\s*=\s*"\K[^"]+' config.toml)
-            STORED_ID=$(python -c "import json; print(json.load(open('output/$SLUG/version.json'))['file_id'])" 2>/dev/null || echo "0")
-            echo "stored_id=$STORED_ID" >> $GITHUB_OUTPUT
-            echo "Stored file_id: $STORED_ID"
-          else
-            echo "stored_id=0" >> $GITHUB_OUTPUT
-            echo "No existing version found, will run pipeline"
-          fi
+          # The pipeline checks for updates per-slug internally
           echo "should_run=true" >> $GITHUB_OUTPUT
 
       - name: Run localization pipeline
