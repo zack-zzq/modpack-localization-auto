@@ -65,6 +65,10 @@ def build_resource_pack(
             _create_pack_mcmeta(config.pack_format, description),
         )
 
+        pack_png = config.project_root / "resources" / "pack.png"
+        if pack_png.is_file():
+            zf.write(pack_png, "pack.png")
+
         # 1. Mods translations -> assets/<modid>/lang/zh_cn.json
         mods_dir = translated_dir / "mods"
         if mods_dir.is_dir():

@@ -1,0 +1,64 @@
+name: Auto Release Translated Packs
+
+on:
+  push:
+    paths:
+      - 'output/**/*.zip'
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Release Body
+        id: body
+        run: |
+          echo "BODY_TEXT<<EOF" >> $GITHUB_ENV
+          echo "## 🎉 整合包汉化更新" >> $GITHUB_ENV
+          echo "本次发布包含以下整合包的自动本地化生成文件：" >> $GITHUB_ENV
+          echo "" >> $GITHUB_ENV
+          
+          for dir in output/*; do
+            if [ -d "$dir" ] && [ -f "$dir/version.json" ]; then
+              PACK_NAME=$(cat "$dir/version.json" | jq -r '.name')
+              PACK_VERSION=$(cat "$dir/version.json" | jq -r '.version')
+              MC_VERSION=$(cat "$dir/version.json" | jq -r '.mc_version')
+              SLUG=$(cat "$dir/version.json" | jq -r '.slug')
+              
+              echo "### 🎮 $PACK_NAME" >> $GITHUB_ENV
+              echo "- **整合包版本:** \`$PACK_VERSION\`" >> $GITHUB_ENV
+              echo "- **Minecraft 版本:** \`$MC_VERSION\`" >> $GITHUB_ENV
+              echo "- **文件列表:**" >> $GITHUB_ENV
+              echo "  - \`${SLUG}-localization-resourcepack.zip\`: 放入 \`resourcepacks\` 文件夹并在游戏内启用（置于顶层）。" >> $GITHUB_ENV
+              echo "  - \`${SLUG}-localization-overrides.zip\`: 解压并覆盖到客户端根目录，用于汉化 FTB Quests 等配置文件。" >> $GITHUB_ENV
+              echo "" >> $GITHUB_ENV
+            fi
+          done
+          
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Get Short SHA
+        id: slug
+        run: echo "SHA8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_ENV
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: localization-update-${{ env.SHA8 }}
+          name: Modpack Localization Update ${{ env.SHA8 }}
+          body: ${{ env.BODY_TEXT }}
+          files: output/**/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
