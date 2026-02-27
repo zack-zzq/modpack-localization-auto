@@ -16,3 +16,6 @@
 [submodule "libs/i18n-Dict-Merged"]
 	path = libs/i18n-Dict-Merged
 	url = https://github.com/zack-zzq/i18n-Dict-Merged.git
+[submodule "libs/KubeJS"]
+	path = libs/KubeJS
+	url = https://github.com/KubeJS-Mods/KubeJS.git

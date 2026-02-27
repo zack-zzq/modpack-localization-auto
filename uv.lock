@@ -92,7 +92,7 @@ wheels = [
 
 [[package]]
 name = "ftb-quest-localizer"
-version = "2.0.4"
+version = "2.0.5"
 source = { directory = "libs/FTBQuestLocalizerPython" }
 dependencies = [
     { name = "click" },
@@ -233,7 +233,7 @@ wheels = [
 
 [[package]]
 name = "kubejs-string-extractor"
-version = "1.0.0"
+version = "1.0.1"
 source = { directory = "libs/kubejs-string-extractor" }
 dependencies = [
     { name = "click" },
