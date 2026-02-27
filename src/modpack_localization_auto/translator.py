@@ -28,10 +28,23 @@ def load_dictionary(work_dir: Path) -> dict[str, list[str]]:
     """Download and load Dict-Mini.json from i18n-Dict-Extender releases.
 
     Returns a mapping of english_text -> [chinese_translations] sorted by frequency.
+    Checks the file age and redownloads if older than 12 hours.
     """
     cache_path = work_dir / "dict-mini.json"
+    
+    # Cache expiration: 12 hours
+    cache_ttl = 12 * 3600
+    
+    needs_download = True
+    if cache_path.exists():
+        age = time.time() - cache_path.stat().st_mtime
+        if age < cache_ttl:
+            needs_download = False
+            logger.info("Using cached Dict-Mini.json (%.1f hours old)", age / 3600)
+        else:
+            logger.info("Cached Dict-Mini.json is too old (%.1f hours), redownloading...", age / 3600)
 
-    if not cache_path.exists():
+    if needs_download:
         logger.info("Downloading Dict-Mini.json...")
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -42,8 +55,8 @@ def load_dictionary(work_dir: Path) -> dict[str, list[str]]:
             logger.info("Dict-Mini.json downloaded (%d bytes)", cache_path.stat().st_size)
         except Exception as e:
             logger.warning("Failed to download Dict-Mini.json: %s", e)
-            return {}
-    else:
+            if not cache_path.exists():
+                return {}
         logger.info("Using cached Dict-Mini.json")
 
     try:
@@ -108,6 +121,10 @@ SYSTEM_PROMPT_TEMPLATE = """\
    - 已经是中文的文本
 6. **翻译风格**：使用简洁、自然的中文翻译，符合 Minecraft 中文社区的习惯用语。
 
+## 专属术语表 (Terminology)
+以下是当前整合包的专属术语强制翻译表。你必须严格遵守这些词汇的术语映射，即便它们不是 Minecraft 官方翻译：
+$terminology_context
+
 ## 参考词典
 
 以下是一些模组翻译词典中的参考条目，请在翻译时参考：
@@ -122,6 +139,21 @@ $dict_context
 
 输出一个 JSON 对象，键与输入相同，值是对应的简体中文翻译。不要输出任何其他内容，只输出 JSON。
 """
+
+
+def _build_terminology_context(terminology: dict[str, str]) -> str:
+    """Build terminology context for the LLM prompt.
+    
+    Renders the exact key-value mapping from the config.
+    """
+    if not terminology:
+        return "（无专属术语，请使用通用常理翻译）"
+    
+    lines = []
+    for en_word, zh_word in terminology.items():
+        lines.append(f"- **{en_word}** -> {zh_word}")
+    
+    return "\n".join(lines)
 
 
 def _build_dict_context(
@@ -230,8 +262,12 @@ def translate_with_llm(
         dict_context = _build_dict_context(
             batch, dictionary or {}, max_entries=100
         )
+        term_context = _build_terminology_context(config.custom_terminology)
         from string import Template
-        system_prompt = Template(SYSTEM_PROMPT_TEMPLATE).safe_substitute(dict_context=dict_context)
+        system_prompt = Template(SYSTEM_PROMPT_TEMPLATE).safe_substitute(
+            dict_context=dict_context,
+            terminology_context=term_context,
+        )
 
         user_content = json.dumps(batch, indent=2, ensure_ascii=False)
 

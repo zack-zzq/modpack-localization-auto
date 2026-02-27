@@ -68,13 +68,36 @@ def extract_kubejs(install_dir: Path, output_dir: Path) -> int:
     logger.info("Extracting strings from KubeJS scripts in: %s", kubejs_dir)
     result = extract_from_directory(kubejs_dir)
 
-    if not result.strings:
-        logger.info("No translatable KubeJS strings found")
+    # Generate translation keys from scraped JS strings
+    translations = {}
+    if result.strings:
+        translations = generate_keys(result.strings, namespace="kubejs")
+        
+    # Merge exact pre-mapped keys generated from regex context (e.g. item.kubejs.xxx)
+    if result.premapped_keys:
+        logger.info("Found %d context-mapped keys (e.g. displayName without Text.translate)", len(result.premapped_keys))
+        translations.update(result.premapped_keys)
+    # and modpack authors sometimes bundle manual hardcoded lang files there too.
+    # We must extract these and merge them so they get translated.
+    assets_dir = kubejs_dir / "assets"
+    asset_keys_count = 0
+    if assets_dir.is_dir():
+        import json
+        for lang_file in assets_dir.rglob("lang/en_us.json"):
+            try:
+                data = json.loads(lang_file.read_text(encoding="utf-8"))
+                for k, v in data.items():
+                    if isinstance(v, str):
+                        translations[k] = v
+                        asset_keys_count += 1
+            except Exception as e:
+                logger.warning("Failed to read KubeJS asset lang file %s: %s", lang_file, e)
+                
+    if not translations:
+        logger.info("No translatable KubeJS strings found anywhere")
         return 0
 
-    # Generate translation keys
-    translations = generate_keys(result.strings, namespace="kubejs")
-    logger.info("Generated %d unique KubeJS translation keys", len(translations))
+    logger.info("Generated %d unique KubeJS keys (and %d from assets/lang)", len(translations) - asset_keys_count, asset_keys_count)
 
     # Write en_us.json for the extracted strings
     kubejs_output = output_dir / "kubejs"

@@ -1,5 +1,4 @@
 # Modpack Localization Auto
-# 自动化 Minecraft 整合包本地化工具
 
 本项目用于全自动翻译 Minecraft 整合包的外语文本。包括下载整合包、提取 Mod/KubeJS/FTB Quests 语言文件、使用已有汉化补丁或通过大语言模型 (LLM) 进行翻译，最终打包为即插即用的汉化资源包和配置覆盖包。
 

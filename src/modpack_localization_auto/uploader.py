@@ -192,6 +192,10 @@ def _batch_commit(
     tree_resp.raise_for_status()
     new_tree_sha = tree_resp.json()["sha"]
 
+    if new_tree_sha == base_tree_sha:
+        logger.info("  No changes detected compared to upstream (tree is identical). Skipping commit.")
+        return
+
     # 4. Create commit
     mod_count = len(files) // 2
     commit_message = (

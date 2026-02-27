@@ -24,6 +24,17 @@ llm_max_retries = 3
 #   OPENAI_API_KEY  — API key
 #   OPENAI_MODEL_ID — Model identifier
 
+[translation.terminology]
+# (可选) 在这里添加你个人专属的翻译映射强制规则，专门用于解决像 Calorite 这种作者生造词
+Calorite = "炽陨"
+Desh = "戴斯"
+Ostrum = "紫金"
+Mechanism = "构件"
+Deorum = "光金"
+Pendorite = "潘多拉合金"
+Prosperity = "繁荣合金"
+Lumium = "流明合金"
+
 # CurseForge API key is read from .env:
 #   CURSEFORGE_API_KEY
 
