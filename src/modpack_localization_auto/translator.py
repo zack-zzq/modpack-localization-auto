@@ -22,51 +22,74 @@ DICT_MINI_URL = (
     "https://github.com/zack-zzq/i18n-Dict-Merged"
     "/releases/latest/download/Dict-Mini.json"
 )
+DICT_PATCHOULI_URL = (
+    "https://github.com/zack-zzq/i18n-Dict-Merged"
+    "/releases/latest/download/patchouli_books.json"
+)
 
 
-def load_dictionary(work_dir: Path) -> dict[str, list[str]]:
-    """Download and load Dict-Mini.json from i18n-Dict-Extender releases.
+def load_dictionary(work_dir: Path) -> tuple[dict[str, list[str]], dict[str, str]]:
+    """Download and load Dict-Mini.json and patchouli_books.json.
 
-    Returns a mapping of english_text -> [chinese_translations] sorted by frequency.
+    Returns a tuple of (general_dict, patchouli_dict).
     Checks the file age and redownloads if older than 12 hours.
     """
-    cache_path = work_dir / "dict-mini.json"
+    cache_path_mini = work_dir / "dict-mini.json"
+    cache_path_patchouli = work_dir / "patchouli_books.json"
     
     # Cache expiration: 12 hours
     cache_ttl = 12 * 3600
     
     needs_download = True
-    if cache_path.exists():
-        age = time.time() - cache_path.stat().st_mtime
+    if cache_path_mini.exists() and cache_path_patchouli.exists():
+        age = time.time() - min(cache_path_mini.stat().st_mtime, cache_path_patchouli.stat().st_mtime)
         if age < cache_ttl:
             needs_download = False
-            logger.info("Using cached Dict-Mini.json (%.1f hours old)", age / 3600)
+            logger.info("Using cached dictionaries (%.1f hours old)", age / 3600)
         else:
-            logger.info("Cached Dict-Mini.json is too old (%.1f hours), redownloading...", age / 3600)
+            logger.info("Cached dictionaries are too old (%.1f hours), redownloading...", age / 3600)
 
     if needs_download:
-        logger.info("Downloading Dict-Mini.json...")
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("Downloading dictionaries...")
+        cache_path_mini.parent.mkdir(parents=True, exist_ok=True)
         try:
             with httpx.Client(follow_redirects=True, timeout=60.0) as client:
-                resp = client.get(DICT_MINI_URL)
-                resp.raise_for_status()
-                cache_path.write_bytes(resp.content)
-            logger.info("Dict-Mini.json downloaded (%d bytes)", cache_path.stat().st_size)
+                resp_mini = client.get(DICT_MINI_URL)
+                resp_mini.raise_for_status()
+                cache_path_mini.write_bytes(resp_mini.content)
+                
+                resp_patch = client.get(DICT_PATCHOULI_URL)
+                if resp_patch.status_code == 200:
+                    cache_path_patchouli.write_bytes(resp_patch.content)
+                else:
+                    logger.warning("No patchouli_books.json found upstream, using empty.")
+                    cache_path_patchouli.write_text("{}")
+                    
+            logger.info("Dictionaries downloaded.")
         except Exception as e:
-            logger.warning("Failed to download Dict-Mini.json: %s", e)
-            if not cache_path.exists():
-                return {}
-        logger.info("Using cached Dict-Mini.json")
+            logger.warning("Failed to download dictionaries: %s", e)
+            if not cache_path_mini.exists():
+                return {}, {}
 
+    dict_mini = {}
+    dict_patchouli = {}
+    
     try:
-        data = json.loads(cache_path.read_text(encoding="utf-8"))
+        data = json.loads(cache_path_mini.read_text(encoding="utf-8"))
         if isinstance(data, dict):
-            return data
-        return {}
+            dict_mini = data
     except Exception as e:
         logger.warning("Failed to parse Dict-Mini.json: %s", e)
-        return {}
+        
+    try:
+        if cache_path_patchouli.exists():
+            data = json.loads(cache_path_patchouli.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                dict_patchouli = data
+    except Exception as e:
+        logger.warning("Failed to parse patchouli_books.json: %s", e)
+        
+    return dict_mini, dict_patchouli
 
 
 # ── Dictionary-based translation ──────────────────────────────────
@@ -422,7 +445,7 @@ def translate_all(
     translated_dir.mkdir(parents=True, exist_ok=True)
 
     # Load dictionary
-    dictionary = load_dictionary(config.work_dir)
+    dictionary, patchouli_dict = load_dictionary(config.work_dir)
 
     # Collect stats
     total_files = 0
@@ -493,7 +516,16 @@ def translate_all(
             dict_translated: dict[str, str] = {}
             remaining = entries
             if subdir_name == "mods":
-                dict_translated, remaining = translate_with_dictionary(entries, dictionary)
+                if json_file.name == "patchouli.json":
+                    # For patchouli files, use the specialized 1:1 patchouli dictionary mapping
+                    for key, value in entries.items():
+                        if value in patchouli_dict:
+                            dict_translated[key] = patchouli_dict[value]
+                        else:
+                            remaining[key] = value
+                else:
+                    # Generic Dict-Mini matching
+                    dict_translated, remaining = translate_with_dictionary(entries, dictionary)
 
             # Remove entries that were already translated in a previous run
             already_done: dict[str, str] = {}

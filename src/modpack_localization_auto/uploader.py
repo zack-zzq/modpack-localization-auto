@@ -105,6 +105,26 @@ def upload_to_dict_repo(
         base_path = f"assets/{mc_version}/{modid}"
         file_entries.append((f"{base_path}/en_us.json", en_content))
         file_entries.append((f"{base_path}/zh_cn.json", zh_content))
+        
+        # --- Handle Patchouli Dictionaries ---
+        zh_patchouli_file = mod_translated / "patchouli.json"
+        en_patchouli_file = mods_extracted / modid / "patchouli.json"
+        if zh_patchouli_file.exists() and en_patchouli_file.exists():
+            try:
+                en_patchouli_content = en_patchouli_file.read_bytes()
+                zh_patchouli_content = zh_patchouli_file.read_bytes()
+                
+                en_patch_data = json.loads(en_patchouli_content)
+                zh_patch_data = json.loads(zh_patchouli_content)
+                
+                patch_has_translation = any(
+                    zh_patch_data.get(k) != v for k, v in en_patch_data.items() if k in zh_patch_data
+                )
+                
+                if patch_has_translation:
+                    file_entries.append((f"{base_path}/patchouli.json", zh_patchouli_content))
+            except Exception as e:
+                logger.warning("  %s: failed to read/validate patchouli files: %s", modid, e)
 
     if not file_entries:
         logger.info("No files to upload after filtering")

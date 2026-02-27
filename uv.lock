@@ -2,6 +2,12 @@ version = 1
 revision = 3
 requires-python = ">=3.12"
 
+[manifest]
+members = [
+    "modpack-localization-auto",
+    "mods-string-extractor",
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -270,7 +276,7 @@ requires-dist = [
     { name = "ftb-quest-localizer", directory = "libs/FTBQuestLocalizerPython" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "kubejs-string-extractor", directory = "libs/kubejs-string-extractor" },
-    { name = "mods-string-extractor", directory = "libs/mods-string-extractor" },
+    { name = "mods-string-extractor", editable = "libs/mods-string-extractor" },
     { name = "openai", specifier = ">=1.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
@@ -281,8 +287,13 @@ dev = [{ name = "pytest", specifier = ">=8.0" }]
 
 [[package]]
 name = "mods-string-extractor"
-version = "1.0.0"
-source = { directory = "libs/mods-string-extractor" }
+version = "1.0.1"
+source = { editable = "libs/mods-string-extractor" }
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
 
 [package.metadata]
 

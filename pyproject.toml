@@ -33,7 +33,12 @@ packages = ["src/modpack_localization_auto"]
 curseforge-dl = { path = "libs/curseforge-dl" }
 ftb-quest-localizer = { path = "libs/FTBQuestLocalizerPython" }
 kubejs-string-extractor = { path = "libs/kubejs-string-extractor" }
-mods-string-extractor = { path = "libs/mods-string-extractor" }
+mods-string-extractor = { workspace = true }
+
+[tool.uv.workspace]
+members = [
+    "libs/mods-string-extractor",
+]
 
 [dependency-groups]
 dev = [

@@ -100,6 +100,46 @@ def build_resource_pack(
                 file_count += 1
                 logger.info("  Packed mods: %s (%d keys)", modid, len(data))
 
+                # Handle Patchouli Reconstruction
+                patchouli_file = modid_dir / "patchouli.json"
+                mods_jar_dir = config.work_dir / "instance" / "mods"
+                if patchouli_file.exists() and mods_jar_dir.exists():
+                    try:
+                        patchouli_data = json.loads(patchouli_file.read_text(encoding="utf-8"))
+                        file_map: dict[str, dict[str, str]] = {}
+                        for full_key, translation in patchouli_data.items():
+                            if "::" in full_key:
+                                file_path, json_path = full_key.split("::", 1)
+                                file_map.setdefault(file_path, {})[json_path] = translation
+                        
+                        if file_map:
+                            from mods_string_extractor.packer import _get_jar_for_modid, _replace_patchouli_strings
+                            jar_path = _get_jar_for_modid(mods_jar_dir, modid)
+                            if jar_path:
+                                with zipfile.ZipFile(jar_path, "r") as jar:
+                                    packed_patchouli = 0
+                                    for en_us_path, file_translations in file_map.items():
+                                        try:
+                                            ast = json.loads(jar.read(en_us_path))
+                                            localized_ast = _replace_patchouli_strings(ast, file_translations)
+                                            parts = en_us_path.split("/")
+                                            en_us_idx = parts.index("en_us")
+                                            parts[en_us_idx] = config.target_lang
+                                            if parts[0] == "data":
+                                                parts[0] = "assets"
+                                            target_path = "/".join(parts)
+                                            zf.writestr(
+                                                target_path,
+                                                json.dumps(localized_ast, indent=2, ensure_ascii=False) + "\n",
+                                            )
+                                            packed_patchouli += 1
+                                        except Exception as e:
+                                            logger.warning("Failed to localize %s: %s", en_us_path, e)
+                                    file_count += packed_patchouli
+                                    logger.info("  Packed %d patchouli files for %s", packed_patchouli, modid)
+                    except json.JSONDecodeError as e:
+                        logger.warning("Invalid JSON in patchouli %s: %s, skipping", patchouli_file, e)
+
         # 2. KubeJS lang -> assets/kubejs_string_extractor/lang/zh_cn.json
         kubejs_dir = translated_dir / "kubejs"
         if kubejs_dir.is_dir():
