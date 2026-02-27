@@ -233,7 +233,7 @@ wheels = [
 
 [[package]]
 name = "kubejs-string-extractor"
-version = "1.0.7"
+version = "1.0.9"
 source = { directory = "libs/kubejs-string-extractor" }
 dependencies = [
     { name = "click" },
