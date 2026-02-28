@@ -125,6 +125,8 @@ def build_resource_pack(
                                             parts = en_us_path.split("/")
                                             en_us_idx = parts.index("en_us")
                                             parts[en_us_idx] = config.target_lang
+                                            if parts[0] == "data":
+                                                parts[0] = "assets"
                                             target_path = "/".join(parts)
                                             zf.writestr(
                                                 target_path,
