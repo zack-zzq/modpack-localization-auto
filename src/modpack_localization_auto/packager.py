@@ -121,9 +121,24 @@ def build_resource_pack(
                                     for en_us_path, file_translations in file_map.items():
                                         try:
                                             ast = json.loads(jar.read(en_us_path))
-                                            localized_ast = _replace_patchouli_strings(ast, file_translations)
+                                            
+                                            from mods_string_extractor.extractor import _extract_patchouli_strings
                                             parts = en_us_path.split("/")
                                             en_us_idx = parts.index("en_us")
+                                            
+                                            zh_cn_parts = parts.copy()
+                                            zh_cn_parts[en_us_idx] = config.target_lang
+                                            zh_cn_path_in_jar = "/".join(zh_cn_parts)
+                                            
+                                            merged_translations = {}
+                                            if zh_cn_path_in_jar in jar.namelist():
+                                                zh_ast = json.loads(jar.read(zh_cn_path_in_jar))
+                                                merged_translations = _extract_patchouli_strings(zh_ast)
+                                            
+                                            merged_translations.update(file_translations)
+                                            
+                                            localized_ast = _replace_patchouli_strings(ast, merged_translations)
+                                            
                                             parts[en_us_idx] = config.target_lang
                                             if parts[0] == "data":
                                                 parts[0] = "assets"

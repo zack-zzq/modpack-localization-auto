@@ -519,8 +519,8 @@ def translate_all(
                 if json_file.name == "patchouli.json":
                     # For patchouli files, use the specialized 1:1 patchouli dictionary mapping
                     for key, value in entries.items():
-                        if value in patchouli_dict:
-                            dict_translated[key] = patchouli_dict[value]
+                        if key in patchouli_dict:
+                            dict_translated[key] = patchouli_dict[key]
                         else:
                             remaining[key] = value
                 else:
