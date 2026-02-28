@@ -249,10 +249,10 @@ def translate_with_llm(
 
     # Create a strict timeout to prevent indefinite hangs
     timeout = httpx.Timeout(
-        connect=15.0,
+        connect=15000.0,
         read=config.llm_timeout,
-        write=15.0,
-        pool=15.0,
+        write=15000.0,
+        pool=15000.0,
     )
     http_client = httpx.Client(timeout=timeout)
 
