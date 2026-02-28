@@ -62,3 +62,28 @@ uv run modpack-localize
 - GitHub Actions 会自动触发发布工作流。
 - 它读取你提交的整合包产物，自动创建一个 GitHub Release。
 - 并将生成的 `resourcepack.zip` 和 `overrides.zip` 作为附件附加在 Release 中供玩家下载！
+
+---
+
+## 🛠️ 进阶操作与常见问题
+
+如果你修改了某些配置或需要强制重新翻译某些内容，可以通过删除 `work/` 目录下的缓存文件来让程序重新执行特定步骤。
+
+所有的中间处理文件都存放在 `work/<整合包slug>/` 目录下，主要分为 `extracted/`（已提取的英文原文）和 `translated/`（已汉化的结果）两个文件夹。
+
+### 1. 如何重新翻译单个 Mod（并重新打包）？
+如果你对某个模组（如 `ad_astra`）的翻译不满意，或者想要重新应用新的词典：
+- 进入 `work/<整合包slug>/translated/mods/` 目录。
+- 找到对应模组名称的文件夹（例如 `ad_astra/`）并将其**删除**。
+- 下次运行 `uv run modpack-localize` 时，程序会发现该模组的汉化结果缺失，从而**仅针对该模组**重新进行词典匹配和 LLM 翻译，并最终重新生成资源包。
+
+### 2. 如何重新提取/翻译 KubeJS 脚本？
+如果你更新了整合包的 KubeJS 脚本文件，或者想要强制 LLM 重新翻译 KubeJS 提示词：
+- **重新翻译**：删除 `work/<整合包slug>/translated/kubejs/` 文件夹。下次运行将重新把上次提取出来的英文发送给 LLM 翻译。
+- **重新提取+翻译**：如果你修改了原整合包里的脚本，想要重新提取出里面新的英文句。请进入 `work/<整合包slug>/extracted/` 和 `translated/`，将两边的 `kubejs/` 文件夹**都删除**。下次运行就会重新扫描脚本文件并重新翻译。
+
+### 3. 如何重新提取/翻译 FTB Quests 任务书？
+操作逻辑与 KubeJS 完全一致：
+- **重新翻译**：仅删除 `work/<整合包slug>/translated/ftbquests/`。
+- **重新提取+翻译**：同时删除 `work/<整合包slug>/extracted/ftbquests/` 和 `work/<整合包slug>/translated/ftbquests/` 这两个文件夹。
+- 再次运行程序后，最新生成的汉化任务书会被重新组装并打包到 `output/` 的 overrides 压缩包中。
