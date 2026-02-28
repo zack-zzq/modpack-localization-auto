@@ -239,7 +239,7 @@ wheels = [
 
 [[package]]
 name = "kubejs-string-extractor"
-version = "1.0.9"
+version = "1.0.10"
 source = { directory = "libs/kubejs-string-extractor" }
 dependencies = [
     { name = "click" },
@@ -287,7 +287,7 @@ dev = [{ name = "pytest", specifier = ">=8.0" }]
 
 [[package]]
 name = "mods-string-extractor"
-version = "1.0.1"
+version = "1.0.2"
 source = { editable = "libs/mods-string-extractor" }
 
 [package.dev-dependencies]
