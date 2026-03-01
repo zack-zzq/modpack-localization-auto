@@ -1,0 +1,3 @@
+Extracted mechanism strings:
+Original: event.create(`${id}_mechanism`).texture(`stellar:item/${id}_mechanism`).displayName(`Incomplete ${name} Mechanism`);
+Rewritten: event.create(`${id}_mechanism`).texture(`stellar:item/${id}_mechanism`).displayName(`Incomplete ${name} Mechanism`);

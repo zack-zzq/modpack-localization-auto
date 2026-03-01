@@ -24,6 +24,12 @@ llm_max_retries = 50
 #   OPENAI_API_KEY  — API key
 #   OPENAI_MODEL_ID — Model identifier
 
+[code_llm]
+# Model ID for the smart LLM used for KubeJS AST loop reasoning
+# API endpoints should be set via CODE_LLM_BASE_URL and CODE_LLM_API_KEY in .env
+# If not set, these all fallback to the standard OPENAI_* translation environment variables
+model_id = "claude-3-5-sonnet-20241022"
+
 [translation.terminology]
 # (可选) 在这里添加你个人专属的翻译映射强制规则，专门用于解决像 Calorite 这种作者生造词
 Calorite = "炽陨"

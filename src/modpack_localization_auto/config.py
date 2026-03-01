@@ -40,6 +40,11 @@ class AppConfig:
     openai_api_key: str = ""
     openai_model_id: str = ""
 
+    # Code LLM for semantic reasoning (from .env / toml)
+    code_llm_base_url: str = ""
+    code_llm_api_key: str = ""
+    code_llm_model_id: str = ""
+
     # CurseForge (from .env)
     curseforge_api_key: str = ""
 
@@ -106,6 +111,9 @@ def load_config(config_path: Path | None = None) -> AppConfig:
         openai_base_url=os.environ.get("OPENAI_BASE_URL", ""),
         openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
         openai_model_id=os.environ.get("OPENAI_MODEL_ID", ""),
+        code_llm_base_url=os.environ.get("CODE_LLM_BASE_URL") or os.environ.get("OPENAI_BASE_URL", ""),
+        code_llm_api_key=os.environ.get("CODE_LLM_API_KEY") or os.environ.get("OPENAI_API_KEY", ""),
+        code_llm_model_id=os.environ.get("CODE_LLM_MODEL_ID") or toml_data.get("code_llm", {}).get("model_id") or os.environ.get("OPENAI_MODEL_ID", ""),
         curseforge_api_key=os.environ.get("CURSEFORGE_API_KEY", ""),
         github_token=os.environ.get("GITHUB_TOKEN", ""),
         dict_repo=toml_data.get("upload", {}).get("dict_repo", "zack-zzq/i18n-Dict-Merged"),

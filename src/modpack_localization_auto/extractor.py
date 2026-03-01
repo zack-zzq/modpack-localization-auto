@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ def extract_mods(install_dir: Path, output_dir: Path) -> int:
     return total
 
 
-def extract_kubejs(install_dir: Path, output_dir: Path) -> int:
+def extract_kubejs(install_dir: Path, output_dir: Path, config) -> int:
     """Extract translatable strings from KubeJS scripts."""
     from kubejs_string_extractor.extractor import extract_from_directory
     from kubejs_string_extractor.keygen import generate_keys
@@ -73,10 +74,30 @@ def extract_kubejs(install_dir: Path, output_dir: Path) -> int:
     if result.strings:
         translations = generate_keys(result.strings, namespace="kubejs")
         
-    # Merge exact pre-mapped keys generated from regex context (e.g. item.kubejs.xxx)
     if result.premapped_keys:
         logger.info("Found %d context-mapped keys (e.g. displayName without Text.translate)", len(result.premapped_keys))
         translations.update(result.premapped_keys)
+        
+    # [NEW] Code LLM Semantic Analyzer Integration
+    # Since complex dynamic registries like `event.create(\`${id}_mechanism\`)` inside loops
+    # evade regex, we run a fallback semantic analysis on all scripts containing backticked `.create`.
+    from modpack_localization_auto.kubejs_analyzer import analyze_kubejs_script_for_dynamic_keys
+    
+    analyzed_keys_count = 0
+    create_template_re = re.compile(r"event\.create\(\s*`.+?`\s*\)")
+    
+    for script_file in kubejs_dir.rglob("*.js"):
+        content = script_file.read_text(encoding="utf-8")
+        if create_template_re.search(content):
+            logger.info("Detected template literal registry in %s, sending to Code LLM...", script_file.name)
+            ai_keys = analyze_kubejs_script_for_dynamic_keys(content, config)
+            if ai_keys:
+                translations.update(ai_keys)
+                analyzed_keys_count += len(ai_keys)
+
+    if analyzed_keys_count > 0:
+        logger.info("Code LLM generated %d total dynamic registry keys!", analyzed_keys_count)
+
     # and modpack authors sometimes bundle manual hardcoded lang files there too.
     # We must extract these and merge them so they get translated.
     assets_dir = kubejs_dir / "assets"
@@ -104,14 +125,10 @@ def extract_kubejs(install_dir: Path, output_dir: Path) -> int:
     kubejs_output.mkdir(parents=True, exist_ok=True)
     write_lang_json(translations, kubejs_output, namespace="kubejs_string_extractor")
 
-    # Rewrite .js files: replace hardcoded strings with Text.translatable() calls
-    # These modified scripts go into the overrides pack
-    string_to_key = {v: k for k, v in translations.items()}
-    rewrite_results = rewrite_directory(kubejs_dir, string_to_key, output_dir=kubejs_output)
-    logger.info(
-        "Rewrote %d KubeJS files with Text.translatable() calls",
-        len(rewrite_results),
-    )
+    # Write en_us.json for the extracted strings
+    kubejs_output = output_dir / "kubejs"
+    kubejs_output.mkdir(parents=True, exist_ok=True)
+    write_lang_json(translations, kubejs_output, namespace="kubejs_string_extractor")
 
     return len(translations)
 
@@ -170,7 +187,7 @@ def extract_ftbquests(install_dir: Path, output_dir: Path, modpack_name: str) ->
         return total
 
 
-def extract_all(install_dir: Path, work_dir: Path, modpack_name: str) -> ExtractionResults:
+def extract_all(install_dir: Path, work_dir: Path, modpack_name: str, config) -> ExtractionResults:
     """Run all extractors on an installed modpack."""
     extracted_dir = work_dir / "extracted"
     extracted_dir.mkdir(parents=True, exist_ok=True)
@@ -181,7 +198,7 @@ def extract_all(install_dir: Path, work_dir: Path, modpack_name: str) -> Extract
     results.mods_keys = extract_mods(install_dir, extracted_dir)
 
     # 2. KubeJS
-    results.kubejs_keys = extract_kubejs(install_dir, extracted_dir)
+    results.kubejs_keys = extract_kubejs(install_dir, extracted_dir, config)
     results.has_kubejs = results.kubejs_keys > 0
 
     # 3. FTB Quests

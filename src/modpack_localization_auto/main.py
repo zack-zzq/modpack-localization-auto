@@ -92,7 +92,7 @@ def run_pipeline(config: AppConfig) -> None:
     logger.info("STEP 2: Extract translatable content")
     logger.info("=" * 60)
 
-    extraction = extract_all(install_dir, config.work_dir, modpack_info.name)
+    extraction = extract_all(install_dir, config.work_dir, modpack_info.name, config)
 
     total_keys = extraction.mods_keys + extraction.kubejs_keys + extraction.ftbquests_keys
     if total_keys == 0:
