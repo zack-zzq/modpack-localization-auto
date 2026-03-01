@@ -30,14 +30,17 @@ build-backend = "hatchling.build"
 packages = ["src/modpack_localization_auto"]
 
 [tool.uv.sources]
-curseforge-dl = { path = "libs/curseforge-dl" }
-ftb-quest-localizer = { path = "libs/FTBQuestLocalizerPython" }
-kubejs-string-extractor = { path = "libs/kubejs-string-extractor" }
+curseforge-dl = { workspace = true }
+ftb-quest-localizer = { workspace = true }
+kubejs-string-extractor = { workspace = true }
 mods-string-extractor = { workspace = true }
 
 [tool.uv.workspace]
 members = [
     "libs/mods-string-extractor",
+    "libs/kubejs-string-extractor",
+    "libs/curseforge-dl",
+    "libs/FTBQuestLocalizerPython"
 ]
 
 [dependency-groups]
